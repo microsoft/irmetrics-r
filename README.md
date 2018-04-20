@@ -1,3 +1,41 @@
+# IR metrics for R
+
+This is a small library for implementing several standard "test collection" or "offline" evaluation measures
+for search systems. It uses the C/W/L framework described by Moffat et al. and implements:
+
+* Precision at _k_ (P)
+* Average precision (AP)
+* Reciprocal rank (RR)
+* Expected reciprocal rank (ERR)
+* Rank-biased precision (RBP)
+* Scaled discounted cumulative gain (SDCG)
+* INST
+
+Example:
+
+```r
+# a gain or relevance vector: how good each retrieved thing is, in the order they appear
+gains <- c(1, 0, 0, 0.5, 1)
+
+# precision at 1 is perfect
+P(gains, k=1) #> 1
+# precision at 3 is one-third
+P(gains, k=3) #> 0.33
+
+# rank-biased precision, with persistence 0.7
+RBP(gains, p=0.7) #> 0.42
+
+# Investigate the weight vector, see the metric accumulate, ...
+str(RBP(gains, p=0.7))
+#> List of 8
+#>  $ metric    : num 0.423
+#>  $ C         : num [1:5] 0.7 0.7 0.7 0.7 0.7
+#>  $ W         : num [1:5] 0.3 0.21 0.147 0.103 0.072
+#>  $ gain      : num [1:5] 1 0 0 0.5 1
+#>  $ cum.metric: num [1:5] 0.3 0.3 0.3 0.351 0.423
+#>  $ i         : int [1:5] 1 2 3 4 5
+#>  $ residual  : num 0.168
+```
 
 # Contributing
 
