@@ -26,15 +26,15 @@ P(gains, k=3) #> 0.33
 RBP(gains, p=0.7) #> 0.42
 
 # Investigate the weight vector, see the metric accumulate, ...
-str(RBP(gains, p=0.7))
+str(INST(gains, T=1))
 #> List of 8
-#>  $ metric    : num 0.423
-#>  $ C         : num [1:5] 0.7 0.7 0.7 0.7 0.7
-#>  $ W         : num [1:5] 0.3 0.21 0.147 0.103 0.072
+#>  $ metric    : num 0.678
+#>  $ C         : num [1:5] 0.25 0.444 0.562 0.605 0.605
+#>  $ W         : num [1:5] 0.6345 0.1586 0.0705 0.0397 0.024
 #>  $ gain      : num [1:5] 1 0 0 0.5 1
-#>  $ cum.metric: num [1:5] 0.3 0.3 0.3 0.351 0.423
+#>  $ cum.metric: num [1:5] 0.634 0.634 0.634 0.654 0.678
 #>  $ i         : int [1:5] 1 2 3 4 5
-#>  $ residual  : num 0.168
+#>  $ residual  : num 0.0728
 ```
 
 # Contributing
