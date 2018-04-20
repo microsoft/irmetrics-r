@@ -91,7 +91,6 @@ weighted.precision <- function(C.fn, doc.gain, minN=1) {
             W=Wvec,
             gain=doc.gain,
             cum.metric=cumsum(Wvec*doc.gain),
-            doc.gain=doc.gain,
             i=1:length(Cvec))
   class(m) <- c("irmetric", "list")
   m
