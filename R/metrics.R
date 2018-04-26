@@ -145,7 +145,7 @@ C.fn.P <- function(k) {
 #' @rdname continue.functions
 #' @export
 # INST is from Moffat et al., Australasian Document Computing Symposium 2015
-C.fn.INST  <- function(T) {
+C.fn.INST <- function(T) {
   # depends on rank and how much of what we expected has been seen so far
   function(R, i) {
     Ti <- T-cumsum(R)
@@ -242,7 +242,28 @@ pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
 #' @param T For \code{INST}, the user's target (number of relevant documents, or
 #'   total gain).
 #'
+#' @return All these metrics return a list with the following elements:
+#' \describe{
+#' \item{metric}{The metric value.}
+#' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
+#' the user Continuing to read past rank \emph{i}.}
+#' \item{W}{The computed vector of weights: the important placed on each rank
+#' in the list.}
+#' \item{gain}{The passed gains.}
+#' \item{cum.metric}{The metric accumulated along the list.}
+#' \item{i}{Ranks used (starting at 1).}
+#' }
+#'
+#' For RBP and INST, there will be a further element \code{residual} which
+#' is the total gain possible from unjudged documents: i.e., \code{metric+residual}
+#' is an upper bound on effectiveness if all unjudged documents had gain=1.
+#'
+#' For details of this approach, see Moffat et al., "Users Versus Models: What
+#'Observation Tells Us About Effectiveness Metrics", in Proc. Conf. Information
+#'and Knowledge Management (CIKM) 2013.
+#'
 #' @name ir.metrics
+#' @seealso \code{\link{IFT}}
 NULL
 
 #' @rdname ir.metrics
@@ -299,6 +320,145 @@ AP <- function(doc.gain) { weighted.precision(C.fn.AP(), doc.gain) }
 #' # 0.9830949
 #' @export
 INST  <- function(doc.gain, T) { pad.trim.metric(C.fn.INST(T), doc.gain) }
+
+#
+# IFT needs special handling as it takes two vectors: gain (as above) but also
+# cost.
+#
+C.fn.IFT <- function(A, target, rationality, b1=NA, intercept1=NA, b2=NA, intercept2=NA) {
+
+  # we can specify either b or intercept -- they are equivalent
+  if (missing(b1) || is.na(b1)) {
+    if (missing(intercept1) || is.na(intercept1)) {
+      stop("Need either b1 or intercept1")
+    }
+    # at rate=A, we should have C=1/(1+b); so solving gives b=(1/C)-1
+    b1 <- (1/intercept1) - 1
+  }
+
+  if (missing(b2) || is.na(b2)) {
+    if (missing(intercept2) || is.na(intercept2)) {
+      b2 <- b1
+    } else {
+      b2 <- (1/intercept2) - 1
+    }
+  }
+
+  # There are two parts to this. First, we consume something (a card or a document) and might be
+  # satisfied; then, we if we're not satisfied, we choose whether or not to persist with the
+  # next thing.
+  # C1 is continuing past the first bit, C2 is continuing past the second.
+  #
+  # Both C1 and C2 depend on:
+  # - A, the tolerated gain:cost ratio from the SERP.
+  # - the gain:cost ratio so far.
+  # So the "perfectly rational" thing to do is have C=1 if x>=A, and C=0 if x<A. With rationality=inf this should
+  # (I hope) be a step function.
+  # T is the target (how big is your stomach, how much do you want?), as for INST
+  # Finally we have "intercept" which is the value we actually want for C when x=theta.
+
+  function(R, k) {
+    gain <- cumsum(R)   # total gain so far
+    cost <- cumsum(k)   # total cost so far
+    rate <- gain / cost # rate of gain so far
+
+    # C1: have we had enough? (1-... as we want a continue function, not a stopping function)
+    C1 <- 1 - (1 / (1 + b1*exp((-gain+target)*rationality)))
+
+    # C2: are we tired of looking?
+    C2 <- 1 / (1 + b2*exp((-rate+A)*rationality))
+
+    list(C1=C1, C2=C2, C=C1*C2)
+  }
+
+}
+
+#' IR effectiveness metric derived from information foraging theory.
+#'
+#' Note that unlike the other metrics in this package, \code{IFT} takes as
+#' input both \emph{gain} and \emph{cost} vectors.
+#'
+#' For details, see Azzopardi et al., "Measuring the Utility of Search Engine Result
+#' Pages", Proc. SIGIR 2018.
+#'
+#' \code{b1} and \code{b2} can be specified either directly (via the parameters of
+#' the same name), or via intercepts: where the intercept is the probability of stopping
+#' (C1) or continuing (C2) when the searcher is exactly at their target gain or
+#' allowable rate. If neither \code{b2} nor \code{intercept2} is given, values are copied
+#' from \code{b1}.
+#'
+#' @param doc.gain A vector of gains from returned documents, typically (but not
+#'   always) each in the range 0..1.
+#' @param doc.cost A vector of costs to examine SERP elements, typically (but not
+#'   always) each in the range 0..1.
+#' @param A The allowed (minumum) rate of gain.
+#' @param target The target (maximum) amount of gain. Called $T$ in the description
+#'   by Azzopardi et al.
+#' @param rationality Controls the abruptness with which a searcher changes
+#'   strategy. Called $R1$ and $R2$ in Azzopardi et al., but here we use the same
+#'   value for both continue functions.
+#' @param b1 Base rate: rate of stopping when the searcher has enough gain.
+#' @param intercept1 Base rate: rate of stopping when the searcher has enough gain.
+#' @param b2 Base rate: rate of stopping when the searcher is getting gain at the allowable rate.
+#' @param intercept2 Base rate: rate of stopping when the searcher getting gain at the allowable rate.
+#'
+#' @return Compatible with other \link{ir.metrics} metrics, a list with the following elements:
+#' \describe{
+#' \item{metric}{The metric value.}
+#' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
+#' the user Continuing to read past rank \emph{i}.}
+#' \item{W}{The computed vector of weights: the important placed on each rank
+#' in the list.}
+#' \item{gain}{The passed gains.}
+#' \item{cum.metric}{The metric accumulated along the list.}
+#' \item{i}{Ranks used (starting at 1).}
+#' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
+#' the user Continuing to read past rank \emph{i}.}
+#' }
+#'
+#' IFT adds:\describe{
+#' \item{C1}{The computed \code{C1} vector: \code{C1[[i]]} is the probability of
+#' the user Continuing to read past rank \emph{i}, based on accumulated gain.}
+#' \item{C2}{The computed \code{C2} vector: \code{C2[[i]]} is the probability of
+#' the user Continuing to read past rank \emph{i}, based on rate of gain.}
+#' \item{cost}{The passed costs.}
+#' \item{rate}{The rate of gain at each rank.}
+#' }
+#'
+#' @seealso \link{ir.metrics}
+#' @export
+IFT  <- function(doc.gain, doc.cost, A, target, rationality, b1=NA, intercept1=NA, b2=NA, intercept2=NA) {
+
+  # length of list (of documents)
+  N <- length(doc.gain)
+
+  # sanity
+  if (any(doc.gain > 1)) {
+    warning("Gains > 1, metric may not make sense.")
+  }
+  if (any(doc.cost <= 0)) {
+    warning("Costs <= 0, metric may not make sense.")
+  }
+
+  # get the C vector from cumulated relevance and cost...
+  C.fn <- C.fn.IFT(A=A, target=target, rationality=rationality, b1=b1, intercept1=intercept1, b2=b2, intercept2=intercept2)
+  Cvecs <- C.fn(R=doc.gain, k=doc.cost)
+  # ...and that gives us the final discount (weight) curve...
+  Wvec <- Cvec.to.Wvec(Cvecs$C)
+  # ...from which two vectors we get the final metric
+  m <- list(metric=sum(Wvec*doc.gain),
+            C=Cvecs$C,
+            W=Wvec,
+            gain=doc.gain,
+            cost=doc.cost,
+            rate=cumsum(doc.gain)/cumsum(doc.cost),
+            cum.metric=cumsum(Wvec*doc.gain),
+            i=1:length(Cvecs),
+            C1=Cvecs$C1,
+            C2=Cvecs$C2)
+  class(m) <- c("irmetric", "list")
+  m
+}
 
 #
 # Some things we can do with metrics (generic functions)

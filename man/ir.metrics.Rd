@@ -36,6 +36,27 @@ always) each in the range 0..1.}
 \item{T}{For \code{INST}, the user's target (number of relevant documents, or
 total gain).}
 }
+\value{
+All these metrics return a list with the following elements:
+\describe{
+\item{metric}{The metric value.}
+\item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
+the user Continuing to read past rank \emph{i}.}
+\item{W}{The computed vector of weights: the important placed on each rank
+in the list.}
+\item{gain}{The passed gains.}
+\item{cum.metric}{The metric accumulated along the list.}
+\item{i}{Ranks used (starting at 1).}
+}
+
+For RBP and INST, there will be a further element \code{residual} which
+is the total gain possible from unjudged documents: i.e., \code{metric+residual}
+is an upper bound on effectiveness if all unjudged documents had gain=1.
+
+For details of this approach, see Moffat et al., "Users Versus Models: What
+Observation Tells Us About Effectiveness Metrics", in Proc. Conf. Information
+and Knowledge Management (CIKM) 2013.
+}
 \description{
 These common IR metrics take a vector of "gains", which represents the
 quality (or relevance) of each item in a search engine's list of retrieved
@@ -83,4 +104,7 @@ AP(c(1, 0, 1, 0, 0))
 # 0.8333333
 INST(c(1, 1, 1, 0, 0), T=1)
 # 0.9830949
+}
+\seealso{
+\code{\link{IFT}}
 }
