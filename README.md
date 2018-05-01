@@ -11,6 +11,11 @@ for search systems. It uses the C/W/L framework described by Moffat et al. and i
 * Scaled discounted cumulative gain (SDCG)
 * INST
 
+Install with
+```r
+devtools::install_github("Microsoft/irmetrics-r")
+```
+
 Example:
 
 ```r
