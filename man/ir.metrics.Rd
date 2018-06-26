@@ -42,8 +42,10 @@ All these metrics return a list with the following elements:
 \item{metric}{The metric value.}
 \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
 the user Continuing to read past rank \emph{i}.}
-\item{W}{The computed vector of weights: the important placed on each rank
+\item{W}{The computed vector of weights: the importance placed on each rank
 in the list.}
+\item{L}{The computed vector of "last": the probability that each rank is
+the last one the user examines.}
 \item{gain}{The passed gains.}
 \item{cum.metric}{The metric accumulated along the list.}
 \item{i}{Ranks used (starting at 1).}

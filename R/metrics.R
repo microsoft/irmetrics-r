@@ -34,6 +34,17 @@ Cvec.to.Wvec <- function(Cvec) {
   c(W1, W.tail)
 }
 
+#
+# Convert a C (continue) vector to a L (last) vector
+#
+#' @importFrom utils head
+Cvec.to.Lvec <- function(Cvec) {
+  # probability of getting to rank i is 1,C1,C1C2,C1C2C3,...
+  # probability of stopping at rank i is this times (1-Ci)
+  Cshift <- c(1, head(Cvec, length(Cvec)-1))
+  cumprod(Cshift) * (1-Cvec)
+}
+
 #'Generic weighted-precision metric for IR effectiveness.
 #'
 #'\code{weighted.precision} takes a metric as defined by a \code{C} (continue)
@@ -85,10 +96,13 @@ weighted.precision <- function(C.fn, doc.gain, minN=1) {
   Cvec <- C.fn(R=doc.gain, i=1:N)
   # ...and that gives us the final discount (weight) curve...
   Wvec <- Cvec.to.Wvec(Cvec)
-  # ...from which two vectors we get the final metric
+  # ...as well as the vector of *L*ast probabilities...
+  Lvec <- Cvec.to.Lvec(Cvec)
+  # ...and from the W and gain vectors we get the final metric
   m <- list(metric=sum(Wvec*doc.gain),
             C=Cvec,
             W=Wvec,
+            L=Lvec,
             gain=doc.gain,
             cum.metric=cumsum(Wvec*doc.gain),
             i=1:length(Cvec))
@@ -158,7 +172,7 @@ C.fn.INST <- function(T) {
 C.fn.RR <- function() {
   function(R, i) {
     # continue until we have a document with non-zero gain
-    R[i]==0
+    ifelse(R[i]==0, 1, 0)
   }
 }
 
@@ -247,8 +261,10 @@ pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
 #' \item{metric}{The metric value.}
 #' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
 #' the user Continuing to read past rank \emph{i}.}
-#' \item{W}{The computed vector of weights: the important placed on each rank
+#' \item{W}{The computed vector of weights: the importance placed on each rank
 #' in the list.}
+#' \item{L}{The computed vector of "last": the probability that each rank is
+#' the last one the user examines.}
 #' \item{gain}{The passed gains.}
 #' \item{cum.metric}{The metric accumulated along the list.}
 #' \item{i}{Ranks used (starting at 1).}
