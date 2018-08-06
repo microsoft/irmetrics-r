@@ -100,12 +100,15 @@ weighted.precision <- function(C.fn, doc.gain, minN=1) {
   Lvec <- Cvec.to.Lvec(Cvec)
   # ...and from the W and gain vectors we get the final metric
   m <- list(metric=sum(Wvec*doc.gain),
+            gain=doc.gain,
+            i=1:length(Cvec),
+            cum.metric=cumsum(Wvec*doc.gain),
             C=Cvec,
             W=Wvec,
             L=Lvec,
-            gain=doc.gain,
-            cum.metric=cumsum(Wvec*doc.gain),
-            i=1:length(Cvec))
+            cum.ETU=Lvec * cumsum(doc.gain),
+            ETU=sum(Lvec * cumsum(doc.gain))
+  )
   class(m) <- c("irmetric", "list")
   m
 }
@@ -214,10 +217,8 @@ pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
 
   # now trim back to size
   N <- length(doc.gain)
-  for (field in names(to.trim)) {
-    if (field != "metric") {
-      to.trim[[field]] <- to.trim[[field]][1:N]
-    }
+  for (field in setdiff(names(to.trim), c("metric", "ETU"))) {
+    to.trim[[field]] <- to.trim[[field]][1:N]
   }
   to.trim$residual <- 1 - sum(to.trim$W)
   to.trim
@@ -258,7 +259,7 @@ pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
 #'
 #' @return All these metrics return a list with the following elements:
 #' \describe{
-#' \item{metric}{The metric value.}
+#' \item{metric}{The metric value: this is the expected gain per document examined.}
 #' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
 #' the user Continuing to read past rank \emph{i}.}
 #' \item{W}{The computed vector of weights: the importance placed on each rank
@@ -267,6 +268,9 @@ pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
 #' the last one the user examines.}
 #' \item{gain}{The passed gains.}
 #' \item{cum.metric}{The metric accumulated along the list.}
+#' \item{ETU}{The expected total utility: the expected gain over the whole list.
+#' (See Azzopardi et al., SIGIR'18.)}
+#' \item{cum.ETU}{The total utility accumulated along the list.}
 #' \item{i}{Ranks used (starting at 1).}
 #' }
 #'
