@@ -423,8 +423,10 @@ C.fn.IFT <- function(A, target, rationality, b1=NA, intercept1=NA, b2=NA, interc
 #' \item{metric}{The metric value.}
 #' \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
 #' the user Continuing to read past rank \emph{i}.}
-#' \item{W}{The computed vector of weights: the important placed on each rank
+#' \item{W}{The computed vector of weights: the importance placed on each rank
 #' in the list.}
+#' \item{L}{The computed vector of "last": the probability that each rank is
+#' the last one the user examines.}
 #' \item{gain}{The passed gains.}
 #' \item{cum.metric}{The metric accumulated along the list.}
 #' \item{i}{Ranks used (starting at 1).}
@@ -461,10 +463,13 @@ IFT  <- function(doc.gain, doc.cost, A, target, rationality, b1=NA, intercept1=N
   Cvecs <- C.fn(R=doc.gain, k=doc.cost)
   # ...and that gives us the final discount (weight) curve...
   Wvec <- Cvec.to.Wvec(Cvecs$C)
-  # ...from which two vectors we get the final metric
+  # ...as well as the vector of *L*ast probabilities...
+  Lvec <- Cvec.to.Lvec(Cvecs$C)
+  # ...and from the W and gain vectors we get the final metric
   m <- list(metric=sum(Wvec*doc.gain),
             C=Cvecs$C,
             W=Wvec,
+            L=Lvec,
             gain=doc.gain,
             cost=doc.cost,
             rate=cumsum(doc.gain)/cumsum(doc.cost),
