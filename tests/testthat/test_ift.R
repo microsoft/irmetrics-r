@@ -9,7 +9,10 @@ sanity <- function(m) {
   expect_is(m, "irmetric")
   expect_01(m$metric)
   expect_01(m$C)
+  expect_01(m$C1)
+  expect_01(m$C2)
   expect_01(m$W)
+  expect_01(m$L)
   expect_true(all(m$cum.metric <= m$metric))
 }
 
