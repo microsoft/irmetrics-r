@@ -82,35 +82,65 @@ weighted.precision <- function(C.fn, doc.gain, minN=1) {
   # length of list (of documents)
   N <- length(doc.gain)
   if (N < minN) {
-    warning(paste0("Doc N (", N, ") is less than minimum expected (", minN, "). Padding with gain=0."))
-    doc.gain <- c(doc.gain, rep(0, times=(minN-N)))
+    warning(paste0("Doc N (", N, ") is less than minimum expected (", minN, "). Padding with gain=NA."))
+    doc.gain <- c(doc.gain, rep(NA, times=(minN-N)))
     N <- minN
   }
 
   # sanity
-  if (any(doc.gain > 1)) {
+  if (any(!is.na(doc.gain) & (doc.gain > 1))) {
     warning("Gains > 1, metric may not make sense.")
   }
 
+  # worst case: NAs are not relevant. This is the default
+  doc.gain.worst <- doc.gain ; doc.gain.worst[is.na(doc.gain)] <- 0
+
+  # best case: NAs are relevant. We use this for the residual
+  doc.gain.best  <- doc.gain ;  doc.gain.best[is.na(doc.gain)] <- 1
+
   # get the C vector from cumulated relevance and rank...
-  Cvec <- C.fn(R=doc.gain, i=1:N)
+  Cvec.worst <- C.fn(R=doc.gain.worst, i=1:N)
   # ...and that gives us the final discount (weight) curve...
-  Wvec <- Cvec.to.Wvec(Cvec)
+  Wvec.worst <- Cvec.to.Wvec(Cvec.worst)
   # ...as well as the vector of *L*ast probabilities...
-  Lvec <- Cvec.to.Lvec(Cvec)
+  Lvec.worst <- Cvec.to.Lvec(Cvec.worst)
   # ...and from the W and gain vectors we get the final metric
-  m <- list(metric=sum(Wvec*doc.gain),
+  metric <- sum(Wvec.worst*doc.gain.worst)
+
+  # then again, for best case
+  Cvec.best <- C.fn(R=doc.gain.best, i=1:N)
+  Wvec.best <- Cvec.to.Wvec(Cvec.best)
+  residual  <- sum(Wvec.best*doc.gain.best) - metric
+
+  m <- list(metric=metric,
             gain=doc.gain,
-            i=1:length(Cvec),
-            cum.metric=cumsum(Wvec*doc.gain),
-            C=Cvec,
-            W=Wvec,
-            L=Lvec,
-            cum.ETU=Lvec * cumsum(doc.gain),
-            ETU=sum(Lvec * cumsum(doc.gain))
+            i=1:length(Cvec.worst),
+            cum.metric=cumsum(Wvec.worst*doc.gain.worst),
+            C=Cvec.worst,
+            W=Wvec.worst,
+            L=Lvec.worst,
+            residual=residual,
+            cum.ETU=Lvec.worst * cumsum(doc.gain.worst),
+            ETU=sum(Lvec.worst * cumsum(doc.gain.worst))
   )
   class(m) <- c("irmetric", "list")
   m
+}
+
+#
+# Calculate with an "infinite" tail of unjudged docs
+#
+weighted.precision.tail <- function(C.fn, doc.gain, PADDING=1000) {
+  doc.gainNA <- c(doc.gain, rep(NA, PADDING))
+  NA.case <- weighted.precision(C.fn, doc.gainNA)
+
+  # now trim back to size
+  N <- length(doc.gain)
+  for (field in setdiff(names(NA.case), c("metric", "ETU", "residual"))) {
+    NA.case[[field]] <- NA.case[[field]][1:N]
+  }
+
+  NA.case
 }
 
 #
@@ -208,22 +238,6 @@ C.fn.AP <- function() {
   }
 }
 
-#
-# Calculate with a large tail of all zeros, then trim back to the same length as the input
-#
-pad.trim.metric <- function(C.fn, doc.gain, PADDING=1000) {
-  doc.gain2 <- c(doc.gain, rep(0, PADDING))
-  to.trim <- weighted.precision(C.fn, doc.gain2)
-
-  # now trim back to size
-  N <- length(doc.gain)
-  for (field in setdiff(names(to.trim), c("metric", "ETU"))) {
-    to.trim[[field]] <- to.trim[[field]][1:N]
-  }
-  to.trim$residual <- 1 - sum(to.trim$W)
-  to.trim
-}
-
 #' IR effectiveness metrics in the "weighted precision" family.
 #'
 #' These common IR metrics take a vector of "gains", which represents the
@@ -291,7 +305,7 @@ NULL
 #' RBP(c(1, 1, 1, 0, 0), p=0.6)
 #' # 0.8501041
 #' @export
-RBP <- function(doc.gain, p) { pad.trim.metric(C.fn.RBP(p), doc.gain) }
+RBP <- function(doc.gain, p) { weighted.precision.tail(C.fn.RBP(p), doc.gain) }
 
 #' @rdname ir.metrics
 #' @examples
@@ -339,7 +353,7 @@ AP <- function(doc.gain) { weighted.precision(C.fn.AP(), doc.gain) }
 #' INST(c(1, 1, 1, 0, 0), T=1)
 #' # 0.9830949
 #' @export
-INST  <- function(doc.gain, T) { pad.trim.metric(C.fn.INST(T), doc.gain) }
+INST  <- function(doc.gain, T) { weighted.precision.tail(C.fn.INST(T), doc.gain) }
 
 #
 # IFT needs special handling as it takes two vectors: gain (as above) but also
@@ -489,4 +503,10 @@ IFT  <- function(doc.gain, doc.cost, A, target, rationality, b1=NA, intercept1=N
 # Some things we can do with metrics (generic functions)
 #
 #' @export
-print.irmetric <- function(x, ...) { print(x$metric, ...) }
+print.irmetric <- function(x, ...) {
+  if (x$residual==0) {
+    print(x$metric, ...)
+  } else {
+    print(paste0(format(x$metric), " residual ", format(x$residual), ...))
+  }
+}

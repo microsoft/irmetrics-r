@@ -39,7 +39,7 @@ total gain).}
 \value{
 All these metrics return a list with the following elements:
 \describe{
-\item{metric}{The metric value.}
+\item{metric}{The metric value: this is the expected gain per document examined.}
 \item{C}{The computed \code{C} vector: \code{C[[i]]} is the probability of
 the user Continuing to read past rank \emph{i}.}
 \item{W}{The computed vector of weights: the importance placed on each rank
@@ -48,6 +48,9 @@ in the list.}
 the last one the user examines.}
 \item{gain}{The passed gains.}
 \item{cum.metric}{The metric accumulated along the list.}
+\item{ETU}{The expected total utility: the expected gain over the whole list.
+(See Azzopardi et al., SIGIR'18.)}
+\item{cum.ETU}{The total utility accumulated along the list.}
 \item{i}{Ranks used (starting at 1).}
 }
 
