@@ -1,0 +1,260 @@
+---
+title: "IR Metrics for Recommendation Systems"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{IR Metrics for Recommendation Systems}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(irmetrics)
+```
+
+## Introduction
+
+This document is intended to serve as a tutorial for using the `irmetrics` package for evaluating recommender systems with information retrieval metrics.
+
+We will assume that we have a collection of users each of whom receives a set of recommendations. The number of recommendations received by each person can vary. Additionally, we know (for the purposes of the tutorial) which products a user is acutally interested in.
+
+If a recommendation is relevant, it will receive a relevance score of 1, 0 otherwise. Consider the case below. The numbers being recommended (and the numbers that are relevant) can be thought of as id values to some other database.
+
+```{r testcase}
+calculate_relevance = function(user){
+  user$relevance = as.numeric(user$recommendations %in% user$interests)
+  return(user)
+}
+
+user1 = list(
+  recommendations = c(1,5,9),
+  interests = c(1,2,3,4,5,6)
+)
+user1 = calculate_relevance(user1)
+print(user1)
+```
+
+We see the first two elements recommended (1 and 5) are in the vector of the users interests, so they receive a value of 1 while the last element recommended (9) is not of interest so it receives a 0. Several more test cases are provided below.
+
+```{r testcases}
+user2 = calculate_relevance(list(
+  recommendations = c(1:20),
+  interests = c(1,4,9,15)
+))
+
+user3 = calculate_relevance(list(
+  recommendations = c(1:20),
+  interests = c(1,2,6,11,17,18,19,20)
+))
+
+user4 = calculate_relevance(list(
+  recommendations = c(1:20),
+  interests = c(3,7,12,16,17,18,19,20)
+))
+
+user5 = calculate_relevance(list(
+  recommendations = c(),
+  interests = c(3,6,7,8,9)
+))
+
+user6 = calculate_relevance(list(
+  recommendations = c(2,3,6,8,10),
+  interests = c()
+))
+```
+
+### Precision@k
+
+Precision is a measure of the probability that a recommendation is relevant to the user. The *k* part of it has to do with the order the recommendations are provided in. In this case we can think of it as summing up the first *k* elements of the *relevance* vector and dividing by k.
+
+In our first test case, the first recommendation (1) was in the set of interests, so the precision is 1.
+
+```{r}
+P(user1$relevance,1)
+```
+
+When we look at a *k* of 3, the value drops to 2/3 because only 2 of the 3 recommendations were relevant.
+
+```{r}
+P(user1$relevance,3)
+```
+
+How is a value of *k* > `length(user$relevance)` handled? Consider a *k* of 5. In this case, we append missing values onto the relevance vector to match the length. This results in a P@5 value of 0.4 (2 out of 5) and a residual of 0.4 (2 missing values out of 5).
+
+```{r}
+P(user1$relevance,5)
+```
+
+Table of results for each user below.
+
+```{r,echo=FALSE,warning=FALSE}
+user_list = lapply(list(user1,user2,user3,user4,user5,user6),`[[`,"relevance")
+users = rep(user_list,4)
+k = sort(rep(c(1,3,5,20),6))
+varied_p = purrr::map2(users,k,P)
+varied_p = vapply(varied_p,function(x){x[["metric"]]},FUN.VALUE=0)
+p_table = matrix(varied_p,nrow=6)
+colnames(p_table) = c("k=1","k=3","k=5","k=20")
+rownames(p_table) = paste("User #",1:6,sep="")
+knitr::kable(p_table, caption="P@k",digits = 2)
+```
+
+### Average Precision
+
+For recommendation systems, Average Precision is the average of all precision values for *relevant* elements across the whole set of recommendations.
+
+$$
+\frac{\sum_{i=1}^{i=N} R_i \cdot P@i}{\sum_{i=1}^{i=N} R_i}
+$$
+
+In our first test case, we need to calculate P@k for each relevant item, sum those and divide by the number of relevant items. 
+
+```{r}
+`P@k` = lapply(1:3,P,doc.gain=user1$relevance)
+`P@k` = vapply(`P@k`,function(x){return(x[["metric"]])},0)
+average_precision = sum(`P@k` * user1$relevance) / sum(user1$relevance)
+AP(user1$relevance)[["metric"]] == average_precision
+```
+
+We can see then that this measure is dependent on the order in which recommendations are presented to a user and it is essential that if results are displayed in an ordered fashion, the order needs to be preserved. We produced 3 recommendations, only one wasn't relevant. We can simply shift where the non-relevant recommendation appears in the list and observe the change.
+
+|        | AP |
+|:-------|---:|
+|First   |0.58| 
+|Middle  |0.83| 
+|Last    |   1|
+
+The table detailing how AP changes across use cases is shown below. Note that the metric defaults to 0 when the denominator is 0 (in a case like Users 5 & 6 where no recommendations are produced or no recommendations are relevant). Another thing to note here is the difference between Users 2 & 3. Both received 20 recommendations, of which User #2 found 4 to be relevant and User #3 found 8 to be relevant, yet their Average Precision scores are nearly identical (despite P@20 being double for User #3). This is the strength of the early relevant results.
+
+```{r,echo=FALSE,warning=FALSE}
+ap_table = matrix(vapply(lapply(user_list,AP),`[[`,0,"metric"),ncol=1)
+rownames(ap_table) = paste("User #",1:6,sep="")
+colnames(ap_table) = "Average Precision"
+knitr::kable(ap_table,digits = 2,caption="AP")
+```
+
+### Rank-Biased Precision
+
+As noted above, one aspect of the Average Precision measure is that earlier relevant documents provided greater total weight to the overall measure. More details can be found in [this paper](https://people.eng.unimelb.edu.au/jzobel/fulltext/acmtois08.pdf). The Rank-Biased Precision attempts to control for that by introducing a persistence paramter, or, the probability that a user will move from one result to the next. In the context of a search engine, it's easy to think of 'abandoning' a search after looking at some $n$ results. In the context of recommendations, if they are presented in an ordered fashion, the same could be true, at what point does a user stop perusing the recommendations.
+
+$$
+RBP = (1-p)\cdot\sum_{i=1}^{N}R_i\cdot p^{i-1}
+$$
+
+```{r}
+p = 0.5
+rbp = (1-0.5) * sum(user1$relevance * 0.5^(1:3-1))
+RBP(user1$relevance,0.5)[["metric"]] == rbp
+```
+
+The choice of $p$ is critical and should not be simply arbitrary. Note below how a case like User #4 has an increasing RBP as $p$ increases while Users #1-3 decrease. Large values of $p$ devalue early successes while small do the opposite. One possible way of calculating it is to observe from data at what point recommendations are ignored regardless of relevancy. However, this may be difficult.
+
+```{r,echo=FALSE,warning=FALSE}
+users = rep(user_list,3)
+p = sort(rep(c(0.25,0.5,0.75),6))
+varied_p = purrr::map2(users,p,RBP)
+varied_p = vapply(varied_p,function(x){x[["metric"]]},FUN.VALUE=0)
+rbp_table = matrix(varied_p,ncol=3)
+rownames(rbp_table) = paste("User #",1:6,sep="")
+colnames(rbp_table) = paste("p=",unique(p),sep="")
+knitr::kable(rbp_table,digits = 2,caption="RBP")
+```
+
+### Scaled Discounted Cumulative Gain @ k
+
+Discounted Cumulative Gains is another attempt at addressing the order weighting issue of Average Precision. The core idea is that highly relevant documents which appear further down the results should be penalized because a user is unlikely to view them. In this way it is similar in concept to the Rank-Biased Precision, differing in implementation. There are several formulas for calculating it, a common one is given below. Other formulas produce identical results when the relevance scores are binary (as in our case).
+
+$$
+DCG@k = \sum_{i=1}^{k} \frac{R_i}{log_2(i+1)}
+$$
+
+The problem with DCG is that it has no upper bound and so the metric will grow with the number of matches making it incomparable between users. Thusly a scaling factor needs to be applied. Again, there are many different implementations, but in this package, implementation is by scaling the denominator of the standard DCG so that the sum of all $k$ denominators is 1.
+
+$$
+SDCG@k = \sum_{i=1}^{k} \frac{\frac{R_i}{log_2(i+1)}}{\sum_{j=1}^k \frac{1}{log_2(j + 1)}}
+$$
+
+```{r}
+dcg = user1$relevance / log2(1:3+1)
+sdcg = sum(dcg / sum(1/log2(1:3+1)))
+SDCG(user1$relevance,3)[["metric"]] == sdcg
+```
+
+The table below shows the detailed breakdown of results for each test case. 
+
+```{r,echo=FALSE,warning=FALSE}
+user_list = lapply(list(user1,user2,user3,user4,user5,user6),`[[`,"relevance")
+users = rep(user_list,4)
+k = sort(rep(c(1,3,5,20),6))
+varied_p = purrr::map2(users,k,SDCG)
+varied_p = vapply(varied_p,function(x){x[["metric"]]},FUN.VALUE=0)
+p_table = matrix(varied_p,nrow=6)
+colnames(p_table) = c("k=1","k=3","k=5","k=20")
+rownames(p_table) = paste("User #",1:6,sep="")
+knitr::kable(p_table, caption="SDCG@k",digits = 2)
+```
+
+### AP vs RBP vs SDCP
+
+An advantage of Average Precision is that it, in this implementation, does not require any input regarding the depth a user traverses in reviewing results. This make the metric the least open to 'massaging.' However, it does overweight early results which can be troublesome. Rank-Biased Precision and Scaled Discounted Cumulative Gains both address the early overweighting but require additional input which can affect the metric value.
+
+Let's consider Users #3 and #4. Both of these users received 20 recommendations and found 8 of them to be relevant. They each found the last 4 items recommended to be relevant but otherwise, User #4's recommendations were relevant further down the list compared to User #3.
+
+```{r}
+rbind(user3$relevance,user4$relevance)
+```
+
+The table below shows the results of applying each metric to the relevancy of recommendations. It's interesting to note that SDCG actually makes the two result sets look more similar to each other while RBP greatly increases the difference. If the order of recommendations is critical to the analysis, it may be beneficial to prefer RBP with a well-chosen value for $p$ over using SDCG.
+
+|        | AP |  SDCG@20|  RBP (p=0.5)| 
+|:-------|---:|--------:|------------:|
+|User #3 |0.53|     0.45|         0.77|
+|User #4 |0.31|     0.32|         0.13|
+
+### Reciprocal Rank
+
+This is a fairly simply measure, it is calculated as the inverse of the rank of the first relevant result. Thus it is similar to Average Precision in that it is order dependent and as such, it is most useful if top-ranked results are essential to the way recommendations are shared.
+
+In the first test case, the first recommendation is relevant (rank = 1) and so the RR score is simply 1.
+
+```{r}
+RR(user1$relevance)
+```
+
+Note in the table below how cases where no recommendations are produced or none are relevant, the metric defaults to 0.
+
+```{r,echo=FALSE,warning=FALSE}
+rr_table = matrix(vapply(lapply(user_list,RR),`[[`,0,"metric"),ncol=1)
+rownames(rr_table) = paste("User #",1:6,sep="")
+colnames(rr_table) = "Reciprocal Rank"
+knitr::kable(rr_table,digits = 2,caption="RR")
+```
+
+### Expected Reciprocal Rank
+
+Expected Reciprocal Rank is a cascade based metric which provides the expectation of the the rank where a user first finds a relevant recommendation. You can read more about this metric in [this article](http://olivier.chapelle.cc/pub/err.pdf). In the formula below we see it's the sum of reciprocal rank multiplied by the product of all previous relevancies. In the case we've defined here, where a recommendation is relevant or it is not, this expectation will always be identical to the reciprocal rank. This is because as soon as a relevant result is found (with a relevancy score of 1) the probability component will drop to 0 and no further reciprocal ranks will be computed or summed.
+
+$$
+ERR = \sum_{r=1}^{N}\frac{1}{r}\prod_{i=1}^{r-1}(1-R_i)R_r 
+$$
+
+```{r, eval=FALSE}
+p = 1
+err = 0
+rel = user5$relevance
+for(r in 1:length(rel)){
+  R = rel[r]
+  err = err + p*R/r
+  p = p*(1-R)
+}
+print(err)
+```
+
+In a recommendation system, relevancy could possibly be estimated using some method which would result in non-binary values which would provide differing values.
+
+```{r,echo=FALSE,warning=FALSE}
+err_table = matrix(vapply(lapply(user_list,RR),`[[`,0,"metric"),ncol=1)
+rownames(err_table) = paste("User #",1:6,sep="")
+colnames(err_table) = "Expected Reciprocal Rank"
+knitr::kable(err_table,digits = 2,caption="ERR")
+```
