@@ -2,7 +2,8 @@ Package: irmetrics
 Type: Package
 Title: Information Retrieval Effectiveness Metrics
 Version: 0.3.9002
-Authors@R: as.person("Paul Thomas <pathom@microsoft.com> [aut, cre]")
+Authors@R: c(as.person("Paul Thomas <pathom@microsoft.com> [aut, cre]"),
+    as.person("Mark Ewing [ctb]"))
 Maintainer: Paul Thomas <pathom@microsoft.com>
 Description: Routines for calculating precision, RBP, INST, and other measures of effectiveness for information retrieval (search) systems.
 License: MIT + file LICENSE
