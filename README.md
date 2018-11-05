@@ -14,6 +14,7 @@ for search systems. It uses the C/W/L framework described by Moffat et al. and i
 Install with
 ```r
 devtools::install_github("Microsoft/irmetrics-r")
+library(irmetrics)
 ```
 
 Example:
